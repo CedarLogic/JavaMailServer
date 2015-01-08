@@ -5,6 +5,8 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.ArrayList;
+import java.util.Scanner;
 import java.util.concurrent.LinkedBlockingQueue;
 import javax.xml.bind.DatatypeConverter;
 import com.javaprophet.javamailserver.JavaMailServer;
@@ -82,6 +84,36 @@ public class ThreadWorkerIMAP extends Thread {
 						cmd = line.substring(0, line.contains(" ") ? line.indexOf(" ") : line.length()).toLowerCase();
 						line = line.substring(cmd.length()).trim();
 						args = line.split(" ");
+						String[] nargs = new String[args.length];
+						String ctps = "";
+						int cloc = 0;
+						int clen = 0;
+						boolean act = false;
+						int nlen = args.length;
+						for (int i = 0; i < args.length; i++) {
+							if (!act && args[i].contains("(")) {
+								act = true;
+								ctps = "";
+								cloc = i;
+								nlen += 1;
+							}
+							if (act) {
+								ctps += args[i] + " ";
+								clen++;
+								nlen--;
+								if (args[i].contains(")")) {
+									ctps = ctps.trim();
+									nargs[cloc] = ctps;
+									act = false;
+								}
+							}else {
+								nargs[i] = args[i];
+							}
+						}
+						args = new String[nlen];
+						for (int i = 0; i < nlen; i++) {
+							args[i] = nargs[i];
+						}
 					}else {
 						letters = "";
 						cmd = "";
@@ -424,7 +456,7 @@ public class ThreadWorkerIMAP extends Thread {
 								}
 								focus.state = 2;
 								focus.selectedMailbox = null;
-								writeLine(focus, letters, "OK check.");
+								writeLine(focus, letters, "OK close.");
 							}else if (cmd.equals("expunge")) {
 								noCMD = false;
 								for (int i = 0; i < focus.selectedMailbox.emails.size(); i++) {
@@ -436,15 +468,192 @@ public class ThreadWorkerIMAP extends Thread {
 								}
 								writeLine(focus, letters, "OK expunge.");
 							}else if (cmd.equals("search")) {
-								writeLine(focus, letters, "NO Not yet implemented.");
+								if (args.length >= 2) {
+									args = new String[]{args[1]};
+								}
+								if (args.length >= 1) {
+									writeLine(focus, "*", "SEARCH");
+								}
+								writeLine(focus, letters, "OK Not yet implemented.");
 								noCMD = false;
 							}else if (cmd.equals("fetch")) {
+								if (args.length >= 2) {
+									String seq = args[0];
+									ArrayList<Email> toFetch = new ArrayList<Email>();
+									if (seq.contains(":")) {
+										int i = Integer.parseInt(seq.substring(0, seq.indexOf(":"))) - 1;
+										String f = seq.substring(seq.indexOf(":") + 1);
+										int f2 = f.equals("*") ? focus.selectedMailbox.emails.size() : Integer.parseInt(f) - 1;
+										for (; i < f2; i++) {
+											toFetch.add(focus.selectedMailbox.emails.get(i));
+										}
+									}else {
+										if (seq.equals("*")) {
+											toFetch.add(focus.selectedMailbox.emails.get(focus.selectedMailbox.emails.size() - 1));
+										}else {
+											toFetch.add(focus.selectedMailbox.emails.get(Integer.parseInt(seq) - 1));
+										}
+									}
+									String[] tps = args[1].substring(1, args[1].length() - 1).split(" ");
+									String[] ttps = new String[tps.length];
+									String ctps = "";
+									int cloc = 0;
+									int clen = 0;
+									boolean act = false;
+									int nlen = tps.length;
+									for (int i = 0; i < tps.length; i++) {
+										if (!act && tps[i].contains("[")) {
+											act = true;
+											ctps = "";
+											cloc = i;
+											nlen += 1;
+										}
+										if (act) {
+											ctps += tps[i] + " ";
+											clen++;
+											nlen--;
+											if (tps[i].contains("]")) {
+												ctps = ctps.trim();
+												ttps[cloc] = ctps;
+												act = false;
+											}
+										}else {
+											ttps[i] = tps[i];
+										}
+									}
+									tps = new String[nlen];
+									for (int i = 0; i < nlen; i++) {
+										tps[i] = ttps[i];
+									}
+									for (Email e : toFetch) {
+										String ret = e.uid + " FETCH (";
+										for (String s : tps) {
+											s = s.toLowerCase();
+											if (s.equals("uid")) {
+												
+											}else if (s.equals("rfc822.size")) {
+												
+											}else if (s.equals("flags")) {
+												ret += "FLAGS (";
+												for (String flag : e.flags) {
+													ret += flag + " ";
+												}
+												ret = ret.trim();
+												ret += ")";
+											}else if (s.equals("body.peek")) {
+												
+											}
+											ret += " ";
+										}
+										ret = ret.trim();
+										ret += ")";
+										writeLine(focus, "*", ret);
+									}
+									writeLine(focus, letters, "OK");
+								}else {
+									writeLine(focus, letters, "BAD Missing Arguments.");
+								}
 								noCMD = false;
 							}else if (cmd.equals("store")) {
+								writeLine(focus, letters, "NO Not yet implemented.");
 								noCMD = false;
 							}else if (cmd.equals("copy")) {
+								writeLine(focus, letters, "NO Not yet implemented.");
 								noCMD = false;
 							}else if (cmd.equals("uid")) {
+								if (args.length >= 1) {
+									if (args[0].toLowerCase().equals("fetch")) {
+										if (args.length >= 3) {
+											String seq = args[1];
+											ArrayList<Email> toFetch = new ArrayList<Email>();
+											if (seq.contains(":")) {
+												int i = Integer.parseInt(seq.substring(0, seq.indexOf(":"))) - 1;
+												String f = seq.substring(seq.indexOf(":") + 1);
+												int f2 = f.equals("*") ? focus.selectedMailbox.emails.size() : Integer.parseInt(f) - 1;
+												for (; i < f2; i++) {
+													toFetch.add(focus.selectedMailbox.emails.get(i));
+												}
+											}else {
+												if (seq.equals("*")) {
+													toFetch.add(focus.selectedMailbox.emails.get(focus.selectedMailbox.emails.size() - 1));
+												}else {
+													toFetch.add(focus.selectedMailbox.emails.get(Integer.parseInt(seq) - 1));
+												}
+											}
+											String[] tps = args[2].substring(1, args[2].length() - 1).split(" ");
+											String[] ttps = new String[tps.length];
+											String ctps = "";
+											int cloc = 0;
+											int clen = 0;
+											boolean act = false;
+											int nlen = tps.length;
+											for (int i = 0; i < tps.length; i++) {
+												if (!act && tps[i].contains("[")) {
+													act = true;
+													ctps = "";
+													cloc = i;
+													nlen += 1;
+												}
+												if (act) {
+													ctps += tps[i] + " ";
+													clen++;
+													nlen--;
+													if (tps[i].contains("]")) {
+														ctps = ctps.trim();
+														ttps[cloc] = ctps;
+														act = false;
+													}
+												}else {
+													ttps[i] = tps[i];
+												}
+											}
+											tps = new String[nlen];
+											for (int i = 0; i < nlen; i++) {
+												tps[i] = ttps[i];
+											}
+											for (Email e : toFetch) {
+												String ret = e.uid + " FETCH (UID " + e.uid + " ";
+												for (String s : tps) {
+													s = s.toLowerCase();
+													if (s.equals("uid")) {
+														// uid already
+													}else if (s.equals("rfc822.size")) {
+														ret += "RFC822.SIZE " + e.data.length();
+													}else if (s.equals("flags")) {
+														ret += "FLAGS (";
+														for (String flag : e.flags) {
+															ret += flag + " ";
+														}
+														ret = ret.trim();
+														ret += ")";
+													}else if (s.startsWith("body") && s.contains("[")) {
+														s = s.substring(s.indexOf("["), s.length() - 1);
+														String[] headers = s.split(" "); // TODO: no, check if its HEADER.FIELDS...
+														for (String header : headers) {
+															Scanner scan = new Scanner(e.data);
+															while (scan.hasNextLine()) {
+																String lne = scan.nextLine().trim();
+																if (lne.length() <= 0 || !lne.contains(":")) {
+																	break;
+																}
+																
+															}
+														}
+													}
+													ret += " ";
+												}
+												ret = ret.trim();
+												ret += ")";
+												writeLine(focus, "*", ret);
+											}
+											writeLine(focus, letters, "OK");
+										}else {
+											writeLine(focus, letters, "BAD Missing Arguments.");
+										}
+									}
+								}else {
+									writeLine(focus, letters, "BAD Missing Arguments.");
+								}
 								noCMD = false;
 							}
 						}

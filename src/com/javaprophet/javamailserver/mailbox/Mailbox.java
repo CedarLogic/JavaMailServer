@@ -11,6 +11,9 @@ public class Mailbox {
 	public Mailbox(EmailAccount owner, String name) {
 		this.owner = owner;
 		this.name = name;
-		emails.add(new Email("lololol"));
+		Email te = new Email("lololol", emails.size() + 1);
+		te.flags.add("\\Unseen");
+		te.flags.add("\\Recent");
+		emails.add(te);
 	}
 }
