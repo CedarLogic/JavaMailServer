@@ -2,11 +2,15 @@ package com.javaprophet.javamailserver.imap;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Scanner;
 import javax.xml.bind.DatatypeConverter;
 import com.javaprophet.javamailserver.JavaMailServer;
 import com.javaprophet.javamailserver.mailbox.Email;
 import com.javaprophet.javamailserver.mailbox.EmailAccount;
 import com.javaprophet.javamailserver.mailbox.Mailbox;
+import com.javaprophet.javamailserver.util.StringFormatter;
 
 public class IMAPHandler {
 	public static final ArrayList<IMAPCommand> commands = new ArrayList<IMAPCommand>();
@@ -363,6 +367,7 @@ public class IMAPHandler {
 					if (rn.endsWith("\"")) {
 						rn = rn.substring(0, rn.length() - 1);
 					}
+					if (rn.equals("")) rn = ".";
 					String mn = args[1];
 					if (mn.startsWith("\"")) {
 						mn = mn.substring(1);
@@ -529,40 +534,11 @@ public class IMAPHandler {
 						}
 					}
 					String[] tps = args[1].substring(1, args[1].length() - 1).split(" ");
-					String[] ttps = new String[tps.length];
-					String ctps = "";
-					int cloc = 0;
-					int clen = 0;
-					boolean act = false;
-					int nlen = tps.length;
-					for (int i = 0; i < tps.length; i++) {
-						if (!act && tps[i].contains("[")) {
-							act = true;
-							ctps = "";
-							cloc = i;
-							nlen += 1;
-						}
-						if (act) {
-							ctps += tps[i] + " ";
-							clen++;
-							nlen--;
-							if (tps[i].contains("]")) {
-								ctps = ctps.trim();
-								ttps[cloc] = ctps;
-								act = false;
-							}
-						}else {
-							ttps[i] = tps[i];
-						}
-					}
-					tps = new String[nlen];
-					for (int i = 0; i < nlen; i++) {
-						tps[i] = ttps[i];
-					}
+					tps = StringFormatter.congealBySurroundings(tps, "[", "]");
 					for (Email e : toFetch) {
 						String ret = e.uid + " FETCH (";
-						for (String s : tps) {
-							s = s.toLowerCase();
+						for (String s3 : tps) {
+							String s = s3.toLowerCase();
 							if (s.equals("uid")) {
 								ret += "UID " + e.uid;
 							}else if (s.equals("rfc822.size")) {
@@ -575,7 +551,51 @@ public class IMAPHandler {
 								ret = ret.trim();
 								ret += ")";
 							}else if (s.startsWith("body")) {
-								
+								String mhd = "";
+								if (s.contains("[") && s.contains("]") && !(s.indexOf("]") == (s.indexOf("[") + 1))) {
+									String s2 = s.substring(s.indexOf("[") + 1, s.indexOf("]"));
+									String[] kinds = StringFormatter.congealBySurroundings(s2.split(" "), "(", ")");
+									for (int i = 0; i < kinds.length; i++) {
+										String value = kinds[i];
+										if (i != kinds.length - 1 && kinds[i + 1].startsWith("(")) {
+											i++;
+											value += " " + kinds[i];
+										}
+										value = value.toLowerCase().trim();
+										if (value.startsWith("header.fields")) {
+											boolean limit = value.contains("(");
+											String[] limitList = new String[0];
+											if (limit) {
+												limitList = value.substring(value.indexOf("(") + 1, value.indexOf(")")).split(" ");
+											}
+											List<String> limitList2 = Arrays.asList(limitList);
+											limitList = null;
+											
+											Scanner ed = new Scanner(e.data);
+											while (ed.hasNextLine()) {
+												String line = ed.nextLine().trim();
+												if (line.length() > 0 && line.contains(":")) {
+													String hn = line.substring(0, line.indexOf(":")).trim();
+													String hd = line.substring(line.indexOf(":") + 1).trim();
+													if (!limit || (limitList2.contains(hn.toLowerCase()))) {
+														mhd += hn + ": " + hd + JavaMailServer.crlf;
+													}
+												}else {
+													break;
+												}
+											}
+											ed.close();
+										}
+									}
+								}else {
+									mhd = e.data;
+								}
+								String s4 = s3;
+								if (s4.toLowerCase().startsWith("body.peek")) {
+									s4 = "BODY" + s4.substring(9);
+								}
+								ret += s4 + " {" + mhd.length() + "}" + JavaMailServer.crlf;
+								ret += mhd;
 							}
 							ret += " ";
 						}

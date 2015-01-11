@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.concurrent.LinkedBlockingQueue;
+import com.javaprophet.javamailserver.util.StringFormatter;
 
 public class ThreadWorkerIMAP extends Thread {
 	
@@ -52,37 +53,7 @@ public class ThreadWorkerIMAP extends Thread {
 						line = line.substring(letters.length() + 1);
 						cmd = line.substring(0, line.contains(" ") ? line.indexOf(" ") : line.length()).toLowerCase();
 						line = line.substring(cmd.length()).trim();
-						args = line.split(" ");
-						String[] nargs = new String[args.length];
-						String ctps = "";
-						int cloc = 0;
-						int clen = 0;
-						boolean act = false;
-						int nlen = args.length;
-						for (int i = 0; i < args.length; i++) {
-							if (!act && args[i].contains("(")) {
-								act = true;
-								ctps = "";
-								cloc = i;
-								nlen += 1;
-							}
-							if (act) {
-								ctps += args[i] + " ";
-								clen++;
-								nlen--;
-								if (args[i].contains(")")) {
-									ctps = ctps.trim();
-									nargs[cloc] = ctps;
-									act = false;
-								}
-							}else {
-								nargs[i] = args[i];
-							}
-						}
-						args = new String[nlen];
-						for (int i = 0; i < nlen; i++) {
-							args[i] = nargs[i];
-						}
+						args = StringFormatter.congealBySurroundings(line.split(" "), "(", ")");
 					}else {
 						letters = line;
 						cmd = "";
