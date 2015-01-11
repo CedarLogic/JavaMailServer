@@ -1,6 +1,7 @@
 package com.javaprophet.javamailserver.util;
 
 import java.io.File;
+import org.json.simple.JSONObject;
 import com.javaprophet.javamailserver.JavaMailServer;
 
 public class FileManager {
@@ -22,5 +23,13 @@ public class FileManager {
 	
 	public File getBaseFile(String name) {
 		return new File(getMainDir(), name);
+	}
+	
+	public File getSSL() {
+		return new File(getMainDir(), (String)(((JSONObject)JavaMailServer.mainConfig.get("ssl")).get("folder")));
+	}
+	
+	public File getSSLKeystore() {
+		return new File(getSSL(), (String)(((JSONObject)JavaMailServer.mainConfig.get("ssl")).get("keyFile")));
 	}
 }

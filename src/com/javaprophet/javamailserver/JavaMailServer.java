@@ -3,11 +3,21 @@ package com.javaprophet.javamailserver;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.security.KeyStore;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Scanner;
+import javax.net.ssl.KeyManagerFactory;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLServerSocket;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.X509TrustManager;
 import org.json.simple.JSONObject;
 import com.javaprophet.javamailserver.imap.ConnectionIMAP;
 import com.javaprophet.javamailserver.mailbox.EmailAccount;
@@ -35,10 +45,13 @@ public class JavaMailServer {
 	
 	public static final ArrayList<Connection> runningThreads = new ArrayList<Connection>();
 	public static final ArrayList<EmailAccount> accounts = new ArrayList<EmailAccount>();
+	private static final ArrayList<ServerSocket> runningServers = new ArrayList<ServerSocket>();
 	
 	public static void registerAccount(String email, String password) {
 		accounts.add(new EmailAccount(email, password));
 	}
+	
+	private static SSLContext sc;
 	
 	public static void main(String[] args) {
 		try {
@@ -55,15 +68,15 @@ public class JavaMailServer {
 					if (!json.containsKey("threadType")) json.put("threadType", 0);
 					if (!json.containsKey("syncType")) json.put("syncType", 0);
 					if (!json.containsKey("hdsync")) json.put("hdsync", "sync");
-					// if (!json.containsKey("ssl")) json.put("ssl", new JSONObject());
-					// JSONObject ssl = (JSONObject)json.get("ssl");
-					// if (!ssl.containsKey("enabled")) ssl.put("enabled", false);
-					// if (!ssl.containsKey("forceSSL")) ssl.put("forceSSL", false); // TODO: implement
-					// if (!ssl.containsKey("bindport")) ssl.put("bindport", 443);
-					// if (!ssl.containsKey("folder")) ssl.put("folder", "ssl");
-					// if (!ssl.containsKey("keyFile")) ssl.put("keyFile", "keystore");
-					// if (!ssl.containsKey("keystorePassword")) ssl.put("keystorePassword", "password");
-					// if (!ssl.containsKey("keyPassword")) ssl.put("keyPassword", "password");
+					if (!json.containsKey("ssl")) json.put("ssl", new JSONObject());
+					JSONObject ssl = (JSONObject)json.get("ssl");
+					if (!ssl.containsKey("enabled")) ssl.put("enabled", false);
+					if (!ssl.containsKey("bindport")) ssl.put("smtpport", 465);
+					if (!ssl.containsKey("bindport")) ssl.put("imapport", 993);
+					if (!ssl.containsKey("folder")) ssl.put("folder", "ssl");
+					if (!ssl.containsKey("keyFile")) ssl.put("keyFile", "keystore");
+					if (!ssl.containsKey("keystorePassword")) ssl.put("keystorePassword", "password");
+					if (!ssl.containsKey("keyPassword")) ssl.put("keyPassword", "password");
 				}
 			});
 			mainConfig.load();
@@ -71,6 +84,7 @@ public class JavaMailServer {
 			if ((Long)mainConfig.get("syncType") == 0) {
 				curSync = new HardDriveSync();
 			}
+			System.out.println("Loading Accounts and Mailboxes...");
 			if (curSync != null) {
 				curSync.load(accounts);
 			}
@@ -78,12 +92,14 @@ public class JavaMailServer {
 			ConnectionIMAP.init();
 			final int smtpport = Integer.parseInt(mainConfig.get("smtpport").toString());
 			final int imapport = Integer.parseInt(mainConfig.get("imapport").toString());
-			System.out.println("Loading Accounts and Mailboxes...");
+			final int SSLsmtpport = Integer.parseInt(((JSONObject)mainConfig.get("ssl")).get("smtpport").toString());
+			final int SSLimapport = Integer.parseInt(((JSONObject)mainConfig.get("ssl")).get("imapport").toString());
 			System.out.println("Starting SMTPServer on " + smtpport);
 			Thread smtp = new Thread() {
 				public void run() {
 					try {
 						ServerSocket server = new ServerSocket(smtpport);
+						runningServers.add(server);
 						while (!server.isClosed() && !dead) {
 							Socket s = server.accept();
 							DataOutputStream out = new DataOutputStream(s.getOutputStream());
@@ -106,6 +122,7 @@ public class JavaMailServer {
 				public void run() {
 					try {
 						ServerSocket server = new ServerSocket(imapport);
+						runningServers.add(server);
 						while (!server.isClosed() && !dead) {
 							Socket s = server.accept();
 							DataOutputStream out = new DataOutputStream(s.getOutputStream());
@@ -123,6 +140,93 @@ public class JavaMailServer {
 				}
 			};
 			imap.start();
+			if ((boolean)((JSONObject)mainConfig.get("ssl")).get("enabled") == true) {
+				System.out.println("Initializing SSL");
+				KeyStore ks = KeyStore.getInstance("JKS");
+				InputStream ksIs = new FileInputStream(fileManager.getSSLKeystore());
+				try {
+					ks.load(ksIs, ((JSONObject)mainConfig.get("ssl")).get("keystorePassword").toString().toCharArray());
+				}finally {
+					if (ksIs != null) {
+						ksIs.close();
+					}
+				}
+				KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+				kmf.init(ks, ((JSONObject)mainConfig.get("ssl")).get("keyPassword").toString().toCharArray());
+				TrustManager[] trustAllCerts = new TrustManager[]{new X509TrustManager() {
+					public void checkClientTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+					}
+					
+					public void checkServerTrusted(java.security.cert.X509Certificate[] certs, String authType) {
+					}
+					
+					public java.security.cert.X509Certificate[] getAcceptedIssuers() {
+						return null;
+					}
+				}};
+				sc = null;
+				String[] possibleProtocols = new String[]{"TLSv1.2", "TLSv1.1", "TLSv1", "TLSv1.0"};
+				String fp = "";
+				for (String protocol : possibleProtocols) {
+					try {
+						sc = SSLContext.getInstance(protocol);
+						fp = protocol;
+					}catch (NoSuchAlgorithmException e) {
+						continue;
+					}
+				}
+				if (sc == null) {
+					System.out.println("No suitable TLS protocols found, please upgrade Java! SSL disabled.");
+				}else {
+					sc.init(kmf.getKeyManagers(), trustAllCerts, new SecureRandom());
+					System.out.println("Starting SSLSMTPServer on " + SSLsmtpport);
+					Thread ssmtp = new Thread() {
+						public void run() {
+							try {
+								SSLServerSocket sslserver = (SSLServerSocket)sc.getServerSocketFactory().createServerSocket(SSLsmtpport);
+								runningServers.add(sslserver);
+								while (!sslserver.isClosed() && !dead) {
+									Socket s = sslserver.accept();
+									DataOutputStream out = new DataOutputStream(s.getOutputStream());
+									out.flush();
+									DataInputStream in = new DataInputStream(s.getInputStream());
+									out.write(("220 " + mainConfig.get("domain") + " ESMTP JavaMailServer" + crlf).getBytes());
+									ConnectionSMTP c = new ConnectionSMTP(s, in, out, false);
+									c.handleConnection();
+									runningThreads.add(c);
+								}
+							}catch (Exception e) {
+								e.printStackTrace();
+							}
+							dead = true;
+						}
+					};
+					ssmtp.start();
+					System.out.println("Starting SSLIMAPServer on " + SSLimapport);
+					Thread simap = new Thread() {
+						public void run() {
+							try {
+								SSLServerSocket sslserver = (SSLServerSocket)sc.getServerSocketFactory().createServerSocket(SSLimapport);
+								runningServers.add(sslserver);
+								while (!sslserver.isClosed() && !dead) {
+									Socket s = sslserver.accept();
+									DataOutputStream out = new DataOutputStream(s.getOutputStream());
+									out.flush();
+									DataInputStream in = new DataInputStream(s.getInputStream());
+									out.write(("* OK " + mainConfig.get("domain") + " IMAP JavaMailServer ready." + crlf).getBytes());
+									ConnectionIMAP c = new ConnectionIMAP(s, in, out, false);
+									c.handleConnection();
+									runningThreads.add(c);
+								}
+							}catch (Exception e) {
+								e.printStackTrace();
+							}
+							dead = true;
+						}
+					};
+					simap.start();
+				}
+			}
 			Scanner scan = new Scanner(System.in);
 			while (!dead) {
 				String command = scan.nextLine();
@@ -190,6 +294,13 @@ public class JavaMailServer {
 				e.printStackTrace();
 			}
 			mainConfig.save();
+			for (ServerSocket server : runningServers) {
+				try {
+					if (!server.isClosed()) server.close();
+				}catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
 		}
 	}
 }

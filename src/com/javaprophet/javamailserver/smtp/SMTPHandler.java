@@ -61,10 +61,14 @@ public class SMTPHandler {
 			}
 		});
 		
-		commands.add(new SMTPCommand("mail", 2, 3) {
+		commands.add(new SMTPCommand("mail", 1, 3) {
 			public void run(SMTPWork focus, String line) throws IOException {
 				if (line.toLowerCase().startsWith("from:")) {
 					focus.mailFrom = line.substring(5).trim();
+					if (focus.mailFrom.endsWith("@" + JavaMailServer.mainConfig.get("domain")) && focus.authUser == null) {
+						focus.writeLine(535, "NO Not Authorized");
+						return;
+					}
 					focus.rcptTo.clear();
 					focus.data.clear();
 					focus.state = 3;

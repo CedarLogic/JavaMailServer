@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.concurrent.LinkedBlockingQueue;
+import com.javaprophet.javamailserver.JavaMailServer;
 import com.javaprophet.javamailserver.util.StringFormatter;
 
 public class ThreadWorkerIMAP extends Thread {
@@ -31,7 +32,7 @@ public class ThreadWorkerIMAP extends Thread {
 	}
 	
 	public void run() {
-		while (keepRunning) {
+		while (keepRunning && !JavaMailServer.dead) {
 			IMAPWork focus = workQueue.poll();
 			if (focus == null) {
 				try {

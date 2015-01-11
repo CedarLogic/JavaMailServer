@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.net.Socket;
 import java.net.SocketException;
 import java.util.concurrent.LinkedBlockingQueue;
+import com.javaprophet.javamailserver.JavaMailServer;
 
 public class ThreadWorkerSMTP extends Thread {
 	
@@ -30,7 +31,7 @@ public class ThreadWorkerSMTP extends Thread {
 	}
 	
 	public void run() {
-		while (keepRunning) {
+		while (keepRunning && !JavaMailServer.dead) {
 			SMTPWork focus = workQueue.poll();
 			if (focus == null) {
 				try {
