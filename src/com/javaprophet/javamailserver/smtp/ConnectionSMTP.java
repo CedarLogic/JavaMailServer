@@ -1,10 +1,11 @@
-package com.javaprophet.javamailserver.networking;
+package com.javaprophet.javamailserver.smtp;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.net.Socket;
 import java.util.ArrayList;
 import com.javaprophet.javamailserver.JavaMailServer;
+import com.javaprophet.javamailserver.networking.Connection;
 
 /**
  * Handles a single connection.

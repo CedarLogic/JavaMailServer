@@ -1,4 +1,4 @@
-package com.javaprophet.javamailserver.networking;
+package com.javaprophet.javamailserver.smtp;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
