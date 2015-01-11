@@ -3,14 +3,18 @@ package com.javaprophet.javamailserver;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
+import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Scanner;
 import org.json.simple.JSONObject;
 import com.javaprophet.javamailserver.imap.ConnectionIMAP;
 import com.javaprophet.javamailserver.mailbox.EmailAccount;
 import com.javaprophet.javamailserver.networking.Connection;
 import com.javaprophet.javamailserver.smtp.ConnectionSMTP;
+import com.javaprophet.javamailserver.sync.HardDriveSync;
+import com.javaprophet.javamailserver.sync.Sync;
 import com.javaprophet.javamailserver.util.Config;
 import com.javaprophet.javamailserver.util.ConfigFormat;
 import com.javaprophet.javamailserver.util.FileManager;
@@ -20,14 +24,21 @@ public class JavaMailServer {
 	public static Config mainConfig;
 	public static final FileManager fileManager = new FileManager();
 	public static final String crlf = System.getProperty("line.separator");
+	public static Sync curSync = null;
+	public static boolean dead = false;
 	
 	public static void setupFolders() {
 		fileManager.getMainDir().mkdirs();
 		fileManager.getTemp().mkdirs();
+		fileManager.getSync().mkdirs();
 	}
 	
 	public static final ArrayList<Connection> runningThreads = new ArrayList<Connection>();
 	public static final ArrayList<EmailAccount> accounts = new ArrayList<EmailAccount>();
+	
+	public static void registerAccount(String email, String password) {
+		accounts.add(new EmailAccount(email, password));
+	}
 	
 	public static void main(String[] args) {
 		try {
@@ -42,6 +53,8 @@ public class JavaMailServer {
 					if (!json.containsKey("smtpport")) json.put("smtpport", 25);
 					if (!json.containsKey("imapport")) json.put("imapport", 143);
 					if (!json.containsKey("threadType")) json.put("threadType", 0);
+					if (!json.containsKey("syncType")) json.put("syncType", 0);
+					if (!json.containsKey("hdsync")) json.put("hdsync", "sync");
 					// if (!json.containsKey("ssl")) json.put("ssl", new JSONObject());
 					// JSONObject ssl = (JSONObject)json.get("ssl");
 					// if (!ssl.containsKey("enabled")) ssl.put("enabled", false);
@@ -55,18 +68,23 @@ public class JavaMailServer {
 			});
 			mainConfig.load();
 			setupFolders();
+			if ((Long)mainConfig.get("syncType") == 0) {
+				curSync = new HardDriveSync();
+			}
+			if (curSync != null) {
+				curSync.load(accounts);
+			}
 			ConnectionSMTP.init();
 			ConnectionIMAP.init();
 			final int smtpport = Integer.parseInt(mainConfig.get("smtpport").toString());
 			final int imapport = Integer.parseInt(mainConfig.get("imapport").toString());
 			System.out.println("Loading Accounts and Mailboxes...");
-			accounts.add(new EmailAccount("cock@minealts.com", "sdfsadfsadfasdf", 0));
 			System.out.println("Starting SMTPServer on " + smtpport);
 			Thread smtp = new Thread() {
 				public void run() {
 					try {
 						ServerSocket server = new ServerSocket(smtpport);
-						while (!server.isClosed()) {
+						while (!server.isClosed() && !dead) {
 							Socket s = server.accept();
 							DataOutputStream out = new DataOutputStream(s.getOutputStream());
 							out.flush();
@@ -79,6 +97,7 @@ public class JavaMailServer {
 					}catch (Exception e) {
 						e.printStackTrace();
 					}
+					dead = true;
 				}
 			};
 			smtp.start();
@@ -87,7 +106,7 @@ public class JavaMailServer {
 				public void run() {
 					try {
 						ServerSocket server = new ServerSocket(imapport);
-						while (!server.isClosed()) {
+						while (!server.isClosed() && !dead) {
 							Socket s = server.accept();
 							DataOutputStream out = new DataOutputStream(s.getOutputStream());
 							out.flush();
@@ -100,12 +119,77 @@ public class JavaMailServer {
 					}catch (Exception e) {
 						e.printStackTrace();
 					}
+					dead = true;
 				}
 			};
 			imap.start();
-			mainConfig.save();
+			Scanner scan = new Scanner(System.in);
+			while (!dead) {
+				String command = scan.nextLine();
+				if (command.equals("exit") || command.equals("stop")) {
+					dead = true;
+				}else if (command.equals("save")) {
+					if (curSync != null) try {
+						curSync.save(accounts);
+					}catch (IOException e) {
+						e.printStackTrace();
+					}
+					mainConfig.save();
+					System.out.println("Saved Config & Accounts!");
+				}else if (command.startsWith("register")) {
+					String[] args2 = command.substring(8).trim().split(" ");
+					if (args2.length == 2) {
+						String email = args2[0];
+						String password = args2[1];
+						if (!email.endsWith("@" + mainConfig.get("domain"))) {
+							System.out.println("Invalid Email Address!");
+						}else {
+							boolean bad = false;
+							for (EmailAccount acct : accounts) {
+								if (acct.email.equals(email)) {
+									bad = true;
+									break;
+								}
+							}
+							if (bad) {
+								System.out.println("Email Taken!");
+							}else {
+								registerAccount(email, password);
+								System.out.println("Successfully Registered!");
+							}
+						}
+					}else {
+						System.out.println("Unspecified Email/Password!");
+					}
+				}else if (command.equals("reload")) {
+					try {
+						mainConfig.load();
+					}catch (Exception e) {
+						e.printStackTrace();
+					}
+					System.out.println("Loaded Config! Some entries will require a restart. Emails not reloaded.");
+				}else if (command.equals("help")) {
+					System.out.println("Commands:");
+					System.out.println("exit/stop");
+					System.out.println("reload");
+					System.out.println("help");
+					System.out.println("save");
+					System.out.println("register <email>@" + mainConfig.get("domain") + " <password>");
+					System.out.println("");
+					System.out.println("Java Mail Server(JMS) version " + VERSION);
+				}else {
+					System.out.println("Unknown Command: " + command);
+				}
+			}
 		}catch (Exception e) {
 			e.printStackTrace();
+		}finally {
+			if (curSync != null) try {
+				curSync.save(accounts);
+			}catch (IOException e) {
+				e.printStackTrace();
+			}
+			mainConfig.save();
 		}
 	}
 }

@@ -16,6 +16,10 @@ public class FileManager {
 		return new File(getMainDir(), (String)JavaMailServer.mainConfig.get("temp"));
 	}
 	
+	public File getSync() {
+		return new File(getMainDir(), (String)JavaMailServer.mainConfig.get("hdsync"));
+	}
+	
 	public File getBaseFile(String name) {
 		return new File(getMainDir(), name);
 	}

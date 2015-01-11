@@ -594,7 +594,7 @@ public class IMAPHandler {
 									if (e.flags.contains("\\Unseen")) e.flags.remove("\\Unseen");
 									if (e.flags.contains("\\Seen")) e.flags.add("\\Seen");
 								}
-								ret += s4 + " {" + mhd.length() + "}" + JavaMailServer.crlf;
+								ret += s4 + " {" + (mhd.length() - 2) + "}" + JavaMailServer.crlf;
 								ret += mhd;
 							}
 							ret += " ";

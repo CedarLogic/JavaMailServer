@@ -5,14 +5,12 @@ import java.util.ArrayList;
 public class EmailAccount {
 	public final String email;
 	public final String password;
-	public final int dbID;
 	public final ArrayList<Mailbox> mailboxes = new ArrayList<Mailbox>();
 	public final Mailbox INBOX;
 	
-	public EmailAccount(String email, String password, int dbID) {
+	public EmailAccount(String email, String password) {
 		this.email = email;
 		this.password = password;
-		this.dbID = dbID;
 		mailboxes.add(INBOX = new Mailbox(this, "INBOX"));
 		mailboxes.add(new Mailbox(this, "Trash"));
 		mailboxes.add(new Mailbox(this, "Sent"));
