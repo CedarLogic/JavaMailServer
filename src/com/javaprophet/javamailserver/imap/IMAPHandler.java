@@ -611,11 +611,69 @@ public class IMAPHandler {
 			
 		});
 		
-		commands.add(new IMAPCommand("store", 3, 100) {
+		final IMAPCommand store;
+		
+		commands.add(store = new IMAPCommand("store", 3, 100) {
 			
 			@Override
 			public void run(IMAPWork focus, String letters, String[] args) throws IOException {
-				focus.writeLine(focus, letters, "NO Not yet implemented.");
+				if (args.length >= 3) {
+					String seq = args[0];
+					ArrayList<Email> toFetch = new ArrayList<Email>();
+					if (seq.contains(":")) {
+						int i = Integer.parseInt(seq.substring(0, seq.indexOf(":"))) - 1;
+						String f = seq.substring(seq.indexOf(":") + 1);
+						int f2 = f.equals("*") ? focus.selectedMailbox.emails.size() : Integer.parseInt(f) - 1;
+						for (; i < f2; i++) {
+							toFetch.add(focus.selectedMailbox.emails.get(i));
+						}
+					}else {
+						if (seq.equals("*")) {
+							toFetch.add(focus.selectedMailbox.emails.get(focus.selectedMailbox.emails.size() - 1));
+						}else {
+							toFetch.add(focus.selectedMailbox.emails.get(Integer.parseInt(seq) - 1));
+						}
+					}
+					String fc = args[1].toLowerCase();
+					String[] flags = args[2].substring(1, args[2].length() - 1).split(" ");
+					for (Email e : toFetch) {
+						if (fc.startsWith("+")) {
+							for (String flag : flags) {
+								if (flag.equals("\\Seen")) {
+									e.flags.remove("\\Unseen");
+								}else if (flag.equals("\\Unseen")) {
+									e.flags.remove("\\Seen");
+								}
+								e.flags.add(flag);
+							}
+						}else if (fc.startsWith("-")) {
+							for (String flag : flags) {
+								if (e.flags.contains(flag)) {
+									e.flags.remove(flag);
+								}
+							}
+						}else {
+							boolean recent = e.flags.contains("\\Recent");
+							e.flags.clear();
+							if (recent) e.flags.add("\\Recent");
+							for (String flag : flags) {
+								e.flags.add(flag);
+							}
+						}
+						if (!fc.toLowerCase().endsWith(".silent")) {
+							String ret = e.uid + " FETCH (FLAGS (";
+							for (String flag : e.flags) {
+								ret += flag + " ";
+							}
+							ret = ret.trim();
+							ret += "))";
+							focus.writeLine(focus, "*", ret);
+						}
+					}
+					focus.writeLine(focus, letters, "OK");
+				}else {
+					focus.writeLine(focus, letters, "BAD Missing Arguments.");
+				}
 			}
 			
 		});
@@ -643,6 +701,12 @@ public class IMAPHandler {
 							nargs[1] = "(UID " + nargs[1].substring(1);
 						}
 						fetch.run(focus, letters, nargs);
+					}else if (args[0].toLowerCase().equals("store")) {
+						String[] nargs = new String[args.length - 1];
+						for (int i = 0; i < nargs.length; i++) {
+							nargs[i] = args[i + 1];
+						}
+						store.run(focus, letters, nargs);
 					}
 				}else {
 					focus.writeLine(focus, letters, "BAD Missing Arguments.");
