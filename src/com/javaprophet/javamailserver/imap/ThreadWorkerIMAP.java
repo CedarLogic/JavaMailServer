@@ -88,10 +88,16 @@ public class ThreadWorkerIMAP extends Thread {
 						cmd = "";
 						args = new String[0];
 					}
+					boolean r = false;
 					for (IMAPCommand comm : IMAPHandler.commands) {
 						if (focus.state == 1 ? comm.comm.equals("") : comm.comm.equals(cmd)) {
 							comm.run(focus, letters, args);
+							r = true;
+							break;
 						}
+					}
+					if (!r) {
+						focus.writeLine(focus, letters, "BAD Command not recognized");
 					}
 				}
 			}catch (IOException e) {

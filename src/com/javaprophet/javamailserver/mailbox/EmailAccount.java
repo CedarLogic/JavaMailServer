@@ -17,12 +17,8 @@ public class EmailAccount {
 	}
 	
 	public Mailbox getMailbox(String name) {
-		return getMailbox(name, false);
-	}
-	
-	public Mailbox getMailbox(String name, boolean regex) {
 		for (Mailbox m : mailboxes) {
-			if (regex ? m.name.matches(name) : m.name.equals(name)) {
+			if (m.name.equals(name)) {
 				return m;
 			}
 		}

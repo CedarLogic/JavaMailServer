@@ -2,7 +2,6 @@ package com.javaprophet.javamailserver.imap;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Scanner;
 import javax.xml.bind.DatatypeConverter;
 import com.javaprophet.javamailserver.JavaMailServer;
 import com.javaprophet.javamailserver.mailbox.Email;
@@ -323,12 +322,25 @@ public class IMAPHandler {
 					if (mn.endsWith("\"")) {
 						mn = mn.substring(0, mn.length() - 1);
 					}
-					Mailbox m = mn.length() == 0 && focus.selectedMailbox != null ? focus.selectedMailbox : focus.authUser.getMailbox(mn, true);
-					if (m == null) {
-						focus.writeLine(focus, letters, "NO Invalid Mailbox.");
-					}else {
-						if (m != null) {
+					if (!mn.equals("*")) {
+						Mailbox m = mn.length() == 0 && focus.selectedMailbox != null ? focus.selectedMailbox : focus.authUser.getMailbox(mn);
+						if (!m.subscribed) {
+							m = null;
+						}
+						if (m == null) {
+							focus.writeLine(focus, letters, "NO Invalid Mailbox.");
+						}else {
 							focus.writeLine(focus, "*", "LIST (\\HasNoChildren) \"" + rn + "\" \"" + m.name + "\"");
+							focus.writeLine(focus, letters, "OK Mailbox list.");
+						}
+					}else {
+						for (Mailbox m : focus.authUser.mailboxes) {
+							if (!m.subscribed) {
+								m = null;
+							}
+							if (m != null) {
+								focus.writeLine(focus, "*", "LIST (\\HasNoChildren) \"" + rn + "\" \"" + m.name + "\"");
+							}
 						}
 						focus.writeLine(focus, letters, "OK Mailbox list.");
 					}
@@ -358,18 +370,30 @@ public class IMAPHandler {
 					if (mn.endsWith("\"")) {
 						mn = mn.substring(0, mn.length() - 1);
 					}
-					Mailbox m = mn.length() == 0 && focus.selectedMailbox != null ? focus.selectedMailbox : focus.authUser.getMailbox(mn, true);
-					if (!m.subscribed) {
-						m = null;
-					}
-					if (m == null) {
-						focus.writeLine(focus, letters, "NO Invalid Mailbox.");
+					
+					if (!mn.equals("*")) {
+						Mailbox m = mn.length() == 0 && focus.selectedMailbox != null ? focus.selectedMailbox : focus.authUser.getMailbox(mn);
+						if (!m.subscribed) {
+							m = null;
+						}
+						if (m == null) {
+							focus.writeLine(focus, letters, "NO Invalid Mailbox.");
+						}else {
+							focus.writeLine(focus, "*", "LSUB (\\HasNoChildren) \"" + rn + "\" \"" + m.name + "\"");
+							focus.writeLine(focus, letters, "OK Mailbox list.");
+						}
 					}else {
-						if (m != null) {
-							focus.writeLine(focus, "*", "LIST (\\HasNoChildren) \"" + rn + "\" \"" + m.name + "\"");
+						for (Mailbox m : focus.authUser.mailboxes) {
+							if (!m.subscribed) {
+								m = null;
+							}
+							if (m != null) {
+								focus.writeLine(focus, "*", "LSUB (\\HasNoChildren) \"" + rn + "\" \"" + m.name + "\"");
+							}
 						}
 						focus.writeLine(focus, letters, "OK Mailbox list.");
 					}
+					
 				}else {
 					focus.writeLine(focus, letters, "BAD No mailbox.");
 				}
@@ -481,7 +505,9 @@ public class IMAPHandler {
 			
 		});
 		
-		commands.add(new IMAPCommand("fetch", 3, 100) {
+		final IMAPCommand fetch;
+		
+		commands.add(fetch = new IMAPCommand("fetch", 3, 100) {
 			
 			@Override
 			public void run(IMAPWork focus, String letters, String[] args) throws IOException {
@@ -538,9 +564,9 @@ public class IMAPHandler {
 						for (String s : tps) {
 							s = s.toLowerCase();
 							if (s.equals("uid")) {
-								
+								ret += "UID " + e.uid;
 							}else if (s.equals("rfc822.size")) {
-								
+								ret += "RFC822.SIZE " + e.data.length();
 							}else if (s.equals("flags")) {
 								ret += "FLAGS (";
 								for (String flag : e.flags) {
@@ -548,7 +574,7 @@ public class IMAPHandler {
 								}
 								ret = ret.trim();
 								ret += ")";
-							}else if (s.equals("body.peek")) {
+							}else if (s.startsWith("body")) {
 								
 							}
 							ret += " ";
@@ -589,93 +615,14 @@ public class IMAPHandler {
 			public void run(IMAPWork focus, String letters, String[] args) throws IOException {
 				if (args.length >= 1) {
 					if (args[0].toLowerCase().equals("fetch")) {
-						if (args.length >= 3) {
-							String seq = args[1];
-							ArrayList<Email> toFetch = new ArrayList<Email>();
-							if (seq.contains(":")) {
-								int i = Integer.parseInt(seq.substring(0, seq.indexOf(":"))) - 1;
-								String f = seq.substring(seq.indexOf(":") + 1);
-								int f2 = f.equals("*") ? focus.selectedMailbox.emails.size() : Integer.parseInt(f) - 1;
-								for (; i < f2; i++) {
-									toFetch.add(focus.selectedMailbox.emails.get(i));
-								}
-							}else {
-								if (seq.equals("*")) {
-									toFetch.add(focus.selectedMailbox.emails.get(focus.selectedMailbox.emails.size() - 1));
-								}else {
-									toFetch.add(focus.selectedMailbox.emails.get(Integer.parseInt(seq) - 1));
-								}
-							}
-							String[] tps = args[2].substring(1, args[2].length() - 1).split(" ");
-							String[] ttps = new String[tps.length];
-							String ctps = "";
-							int cloc = 0;
-							int clen = 0;
-							boolean act = false;
-							int nlen = tps.length;
-							for (int i = 0; i < tps.length; i++) {
-								if (!act && tps[i].contains("[")) {
-									act = true;
-									ctps = "";
-									cloc = i;
-									nlen += 1;
-								}
-								if (act) {
-									ctps += tps[i] + " ";
-									clen++;
-									nlen--;
-									if (tps[i].contains("]")) {
-										ctps = ctps.trim();
-										ttps[cloc] = ctps;
-										act = false;
-									}
-								}else {
-									ttps[i] = tps[i];
-								}
-							}
-							tps = new String[nlen];
-							for (int i = 0; i < nlen; i++) {
-								tps[i] = ttps[i];
-							}
-							for (Email e : toFetch) {
-								String ret = e.uid + " FETCH (UID " + e.uid + " ";
-								for (String s : tps) {
-									s = s.toLowerCase();
-									if (s.equals("uid")) {
-										// uid already
-									}else if (s.equals("rfc822.size")) {
-										ret += "RFC822.SIZE " + e.data.length();
-									}else if (s.equals("flags")) {
-										ret += "FLAGS (";
-										for (String flag : e.flags) {
-											ret += flag + " ";
-										}
-										ret = ret.trim();
-										ret += ")";
-									}else if (s.startsWith("body") && s.contains("[")) {
-										s = s.substring(s.indexOf("["), s.length() - 1);
-										String[] headers = s.split(" "); // TODO: no, check if its HEADER.FIELDS...
-										for (String header : headers) {
-											Scanner scan = new Scanner(e.data);
-											while (scan.hasNextLine()) {
-												String lne = scan.nextLine().trim();
-												if (lne.length() <= 0 || !lne.contains(":")) {
-													break;
-												}
-												
-											}
-										}
-									}
-									ret += " ";
-								}
-								ret = ret.trim();
-								ret += ")";
-								focus.writeLine(focus, "*", ret);
-							}
-							focus.writeLine(focus, letters, "OK");
-						}else {
-							focus.writeLine(focus, letters, "BAD Missing Arguments.");
+						String[] nargs = new String[args.length - 1];
+						for (int i = 0; i < nargs.length; i++) {
+							nargs[i] = args[i + 1];
 						}
+						if (args.length >= 2 && args[1].startsWith("(") && !args[1].contains("UID")) {
+							args[1] = "(UID " + args[1].substring(1);
+						}
+						fetch.run(focus, letters, nargs);
 					}
 				}else {
 					focus.writeLine(focus, letters, "BAD Missing Arguments.");
