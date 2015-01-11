@@ -571,7 +571,8 @@ public class IMAPHandler {
 											Scanner ed = new Scanner(e.data);
 											while (ed.hasNextLine()) {
 												String line = ed.nextLine().trim();
-												if (line.length() > 0 && line.contains(":")) {
+												if (line.length() > 0) {
+													if (!line.contains(":")) continue;
 													String hn = line.substring(0, line.indexOf(":")).trim();
 													String hd = line.substring(line.indexOf(":") + 1).trim();
 													if (!limit || (limitList2.contains(hn.toLowerCase()))) {
