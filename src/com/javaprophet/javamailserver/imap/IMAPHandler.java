@@ -619,8 +619,8 @@ public class IMAPHandler {
 						for (int i = 0; i < nargs.length; i++) {
 							nargs[i] = args[i + 1];
 						}
-						if (args.length >= 2 && args[1].startsWith("(") && !args[1].contains("UID")) {
-							args[1] = "(UID " + args[1].substring(1);
+						if (nargs.length >= 2 && nargs[1].startsWith("(") && !nargs[1].contains("UID")) {
+							nargs[1] = "(UID " + nargs[1].substring(1);
 						}
 						fetch.run(focus, letters, nargs);
 					}
