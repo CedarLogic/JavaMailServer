@@ -61,7 +61,7 @@ public class ThreadWorkerIMAP extends Thread {
 					}
 					boolean r = false;
 					for (IMAPCommand comm : IMAPHandler.commands) {
-						if (focus.state == 1 ? comm.comm.equals("") : comm.comm.equals(cmd)) {
+						if ((focus.state == 1 ? comm.comm.equals("") : comm.comm.equals(cmd)) && comm.minState <= focus.state && comm.maxState >= focus.state) {
 							comm.run(focus, letters, args);
 							r = true;
 							break;

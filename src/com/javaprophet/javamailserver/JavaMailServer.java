@@ -60,7 +60,7 @@ public class JavaMailServer {
 			final int smtpport = Integer.parseInt(mainConfig.get("smtpport").toString());
 			final int imapport = Integer.parseInt(mainConfig.get("imapport").toString());
 			System.out.println("Loading Accounts and Mailboxes...");
-			accounts.add(new EmailAccount("cock", "sdfsadfsadfasdf", 0));
+			accounts.add(new EmailAccount("cock@minealts.com", "sdfsadfsadfasdf", 0));
 			System.out.println("Starting SMTPServer on " + smtpport);
 			Thread smtp = new Thread() {
 				public void run() {

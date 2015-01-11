@@ -328,9 +328,6 @@ public class IMAPHandler {
 					}
 					if (!mn.equals("*")) {
 						Mailbox m = mn.length() == 0 && focus.selectedMailbox != null ? focus.selectedMailbox : focus.authUser.getMailbox(mn);
-						if (!m.subscribed) {
-							m = null;
-						}
 						if (m == null) {
 							focus.writeLine(focus, letters, "NO Invalid Mailbox.");
 						}else {
@@ -378,7 +375,7 @@ public class IMAPHandler {
 					
 					if (!mn.equals("*")) {
 						Mailbox m = mn.length() == 0 && focus.selectedMailbox != null ? focus.selectedMailbox : focus.authUser.getMailbox(mn);
-						if (!m.subscribed) {
+						if (m != null && !m.subscribed) {
 							m = null;
 						}
 						if (m == null) {
@@ -445,7 +442,7 @@ public class IMAPHandler {
 			@Override
 			public void run(IMAPWork focus, String letters, String[] args) throws IOException {
 				if (args.length >= 2) {
-					focus.writeLine(focus, letters, "NO Not Implemented.");
+					focus.writeLine(focus, letters, "BAD Not Implemented.");
 				}else {
 					focus.writeLine(focus, letters, "BAD No mailbox.");
 				}
@@ -593,6 +590,9 @@ public class IMAPHandler {
 								String s4 = s3;
 								if (s4.toLowerCase().startsWith("body.peek")) {
 									s4 = "BODY" + s4.substring(9);
+								}else {
+									if (e.flags.contains("\\Unseen")) e.flags.remove("\\Unseen");
+									if (e.flags.contains("\\Seen")) e.flags.add("\\Seen");
 								}
 								ret += s4 + " {" + mhd.length() + "}" + JavaMailServer.crlf;
 								ret += mhd;

@@ -7,13 +7,15 @@ public class EmailAccount {
 	public final String password;
 	public final int dbID;
 	public final ArrayList<Mailbox> mailboxes = new ArrayList<Mailbox>();
+	public final Mailbox INBOX;
 	
 	public EmailAccount(String email, String password, int dbID) {
 		this.email = email;
 		this.password = password;
 		this.dbID = dbID;
-		mailboxes.add(new Mailbox(this, "INBOX"));
+		mailboxes.add(INBOX = new Mailbox(this, "INBOX"));
 		mailboxes.add(new Mailbox(this, "Trash"));
+		mailboxes.add(new Mailbox(this, "Sent"));
 	}
 	
 	public Mailbox getMailbox(String name) {
@@ -24,4 +26,12 @@ public class EmailAccount {
 		}
 		return null;
 	}
+	
+	public void deliver(Email email) {
+		email.uid = INBOX.emails.size() + 1;
+		email.flags.add("\\Recent");
+		email.flags.add("\\Unseen");
+		INBOX.emails.add(email);
+	}
+	
 }
